@@ -18,6 +18,8 @@ dependencies = [
   "typer>=0.12.0",
   "pillow>=10.0.0",
   "numpy>=1.24.0",
+  "torch>=2.6.0",
+  "torchvision>=0.21.0",
 ]
 
 [project.optional-dependencies]
@@ -31,6 +33,8 @@ train = [
     "pycocotools>=2.0.11",
     "pytorch-lightning>=2.6.1",
     "tensorboard>=2.20.0",
+    "wandb",
+    "faster-coco-eval",
 ]
 
 [project.scripts]
@@ -41,6 +45,15 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 aba_rfdetr = ["templates/*.html"]
+
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu126" }]
+torchvision = [{ index = "pytorch-cu126" }]
 
 [tool.ruff]
 line-length = 100

@@ -17,9 +17,14 @@ def prepare_data_cmd(
     raw_root: Path = Path("data"),
     layout_root: Path = Path("data/rf_train"),
     force: bool = typer.Option(False, "--force", "-f", help="Rebuild even if layout exists."),
+    val_fraction: float = typer.Option(0.2, "--val-fraction", help="Fraction of images for validation."),
+    seed: int = typer.Option(42, "--seed", help="Random seed for reproducible split."),
 ) -> None:
-    """Copy flat data/images + instances.json into data/rf_train/train|valid for rfdetr."""
-    prepare_roboflow_layout(raw_root.resolve(), layout_root.resolve(), force=force)
+    """Split data/images + instances.json into data/rf_train/train|valid for rfdetr."""
+    prepare_roboflow_layout(
+        raw_root.resolve(), layout_root.resolve(),
+        force=force, val_fraction=val_fraction, seed=seed,
+    )
 
 
 @app.command("train")

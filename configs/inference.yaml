@@ -1,18 +1,19 @@
-# RF-DETR inference defaults. Override paths with env MODEL_PATH / ABA_CONFIG_PATH.
+# Two-stage cascade inference config.
+# Override paths with env STAGE1_MODEL_PATH / STAGE2_MODEL_PATH / ABA_CONFIG_PATH.
 
-# One of: RFDETRNano, RFDETRSmall, RFDETRMedium, RFDETRBase, RFDETRLarge (see rfdetr package).
-model_class: RFDETRBase
+stage1:
+  model_class: RFDETRMedium
+  checkpoint_path: runs/train/20260406_181946_stage1_target/checkpoint_best_ema.pth
+  num_classes: 1
+  score_threshold: 0.35
 
-# Optional: path to a trained .pth checkpoint under models/ or absolute path.
-# If null, the model uses its default pretrained weights (downloads on first run).
-checkpoint_path: null
+stage2:
+  model_class: RFDETRMedium
+  checkpoint_path: runs/train/checkpoint_best_ema.pth
+  num_classes: 14          # temporary: old 14-class model until a dedicated Stage 2 is trained
+  score_threshold: 0.35
+  crop_padding: 0.05       # 5% padding around Target bbox before running Stage 2
 
-# Number of classes the head was trained with (COCO detection = 80).
-num_classes: 80
-
-# Minimum confidence for returned boxes.
-score_threshold: 0.35
-
-# Optional JSON file: list of class name strings in class index order.
-# If null, standard COCO 80 class names are used for labeling.
+# Optional JSON file: list of all class name strings in combined output order.
+# If null, built-in defaults are used.
 class_names_file: null

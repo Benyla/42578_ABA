@@ -3,81 +3,555 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>RF-DETR — upload an image</title>
+  <title>ABA Bullet Detection</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
     :root {
-      font-family: system-ui, sans-serif;
-      line-height: 1.5;
-      color: #1a1a1a;
-      background: #f6f7f9;
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #242836;
+      --border: #2e3345;
+      --text: #e4e6ef;
+      --text-dim: #8b8fa3;
+      --accent: #6366f1;
+      --accent-glow: rgba(99,102,241,.25);
+      --green: #22c55e;
+      --amber: #f59e0b;
+      --red: #ef4444;
+      --radius: 14px;
+      --font: 'Inter', system-ui, -apple-system, sans-serif;
     }
-    body { max-width: 52rem; margin: 2rem auto; padding: 0 1rem; }
-    h1 { font-size: 1.35rem; font-weight: 600; }
-    p { color: #444; }
-    .card {
-      background: #fff;
-      border-radius: 8px;
-      padding: 1.25rem 1.5rem;
-      box-shadow: 0 1px 3px rgba(0,0,0,.08);
+
+    html { font-size: 15px; }
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.6;
     }
-    button {
-      margin-top: 0.75rem;
-      padding: 0.5rem 1rem;
-      font-size: 1rem;
-      border-radius: 6px;
-      border: none;
-      background: #2563eb;
-      color: #fff;
+
+    .container { max-width: 960px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+
+    /* ─── Header ─── */
+    header { text-align: center; margin-bottom: 2.5rem; }
+    header h1 { font-size: 1.75rem; font-weight: 700; letter-spacing: -.02em; }
+    header p { color: var(--text-dim); margin-top: .35rem; font-size: .95rem; }
+
+    /* ─── Upload zone ─── */
+    .upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 3rem 2rem;
+      text-align: center;
       cursor: pointer;
+      transition: border-color .2s, background .2s, transform .15s;
+      background: var(--surface);
+      position: relative;
     }
-    button:disabled { opacity: 0.6; cursor: not-allowed; }
-    pre {
+    .upload-zone:hover, .upload-zone.drag-over {
+      border-color: var(--accent);
+      background: var(--surface2);
+      transform: translateY(-2px);
+    }
+    .upload-zone .icon { font-size: 2.8rem; margin-bottom: .75rem; }
+    .upload-zone .label { font-size: 1.05rem; font-weight: 500; }
+    .upload-zone .hint { color: var(--text-dim); font-size: .85rem; margin-top: .35rem; }
+    .upload-zone input[type="file"] {
+      position: absolute; inset: 0; opacity: 0; cursor: pointer;
+    }
+
+    /* ─── Pipeline ─── */
+    .pipeline { margin-top: 2rem; }
+
+    .step {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      margin-bottom: 1.25rem;
+      opacity: 0;
+      transform: translateY(24px);
+      transition: opacity .5s ease, transform .5s ease;
+    }
+    .step.visible { opacity: 1; transform: translateY(0); }
+
+    .step-header {
+      display: flex;
+      align-items: center;
+      gap: .65rem;
+      margin-bottom: 1rem;
+      font-weight: 600;
+      font-size: 1.05rem;
+    }
+    .step-header .emoji { font-size: 1.3rem; }
+    .step-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: .35rem;
+      font-size: .75rem;
+      font-weight: 600;
+      padding: .2rem .65rem;
+      border-radius: 99px;
+      margin-left: auto;
+    }
+    .badge-running { background: rgba(245,158,11,.15); color: var(--amber); }
+    .badge-done    { background: rgba(34,197,94,.15);  color: var(--green); }
+    .badge-error   { background: rgba(239,68,68,.15);  color: var(--red); }
+
+    /* ─── Spinner ─── */
+    .spinner-wrap {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      padding: 1rem 0;
+      color: var(--text-dim);
+    }
+    .spinner {
+      width: 22px; height: 22px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ─── Canvas containers ─── */
+    .canvas-wrap {
+      position: relative;
+      display: inline-block;
+      max-width: 100%;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #000;
+    }
+    .canvas-wrap canvas {
+      display: block;
+      max-width: 100%;
+      height: auto;
+    }
+
+    /* ─── Arrow connector ─── */
+    .connector {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: .5rem 0;
+      color: var(--text-dim);
+      opacity: 0;
+      transition: opacity .4s;
+    }
+    .connector.visible { opacity: 1; }
+    .connector .arrow { font-size: 1.6rem; animation: bounce 1.2s ease infinite; }
+    .connector .label { font-size: .8rem; }
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(5px); }
+    }
+
+    /* ─── Summary card ─── */
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: .75rem;
+      margin-top: .75rem;
+    }
+    .stat-card {
+      background: var(--surface2);
+      border-radius: 10px;
+      padding: .85rem 1rem;
+      text-align: center;
+    }
+    .stat-card .value { font-size: 1.6rem; font-weight: 700; color: var(--accent); }
+    .stat-card .label { font-size: .78rem; color: var(--text-dim); margin-top: .15rem; }
+
+    /* ─── Detection list ─── */
+    .det-list { margin-top: .75rem; }
+    .det-item {
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      padding: .45rem .65rem;
+      border-radius: 8px;
+      font-size: .85rem;
+      margin-bottom: .35rem;
+      background: var(--surface2);
+    }
+    .det-color {
+      width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0;
+    }
+    .det-label { font-weight: 500; }
+    .det-score { margin-left: auto; color: var(--text-dim); font-size: .8rem; }
+
+    /* ─── Reset button ─── */
+    .reset-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: .4rem;
+      margin-top: 1.5rem;
+      padding: .6rem 1.2rem;
+      font-size: .9rem;
+      font-weight: 600;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface2);
+      color: var(--text);
+      cursor: pointer;
+      transition: background .2s, border-color .2s;
+    }
+    .reset-btn:hover { border-color: var(--accent); background: var(--surface); }
+
+    .error-box {
+      background: rgba(239,68,68,.08);
+      border: 1px solid rgba(239,68,68,.25);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      color: var(--red);
       margin-top: 1rem;
-      padding: 1rem;
-      background: #0f172a;
-      color: #e2e8f0;
-      border-radius: 6px;
-      overflow: auto;
-      font-size: 0.85rem;
+      font-size: .9rem;
     }
-    .err { color: #b91c1c; }
+
+    .hidden { display: none !important; }
   </style>
 </head>
 <body>
-  <h1>Object detection (RF-DETR)</h1>
-  <p>Upload an image. The API returns detected objects with labels, scores, and bounding boxes (xyxy pixels).</p>
+<div class="container">
+  <header>
+    <h1>🎯 ABA Bullet Detection</h1>
+    <p>Two-stage cascade: detect target, crop, then find bullet holes</p>
+  </header>
 
-  <div class="card">
-    <form id="f">
-      <input type="file" id="file" accept="image/*" required />
-      <div><button type="submit" id="btn">Run detection</button></div>
-    </form>
-    <pre id="out">Results will appear here.</pre>
+  <!-- Upload -->
+  <div class="upload-zone" id="dropZone">
+    <div class="icon">📷</div>
+    <div class="label">Drop an image here or click to browse</div>
+    <div class="hint">JPG, PNG — any resolution</div>
+    <input type="file" id="fileInput" accept="image/*" />
   </div>
 
-  <script>
-    const form = document.getElementById("f");
-    const btn = document.getElementById("btn");
-    const out = document.getElementById("out");
+  <!-- Pipeline steps (hidden until running) -->
+  <div class="pipeline hidden" id="pipeline">
 
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const fileInput = document.getElementById("file");
-      if (!fileInput.files.length) return;
-      const fd = new FormData();
-      fd.append("file", fileInput.files[0]);
-      btn.disabled = true;
-      out.textContent = "Loading…";
-      try {
-        const res = await fetch("/predict", { method: "POST", body: fd });
-        const data = await res.json();
-        out.textContent = JSON.stringify(data, null, 2);
-      } catch (err) {
-        out.innerHTML = '<span class="err">' + String(err) + "</span>";
-      } finally {
-        btn.disabled = false;
+    <!-- Step 1: Target detection -->
+    <div class="step" id="stepStage1">
+      <div class="step-header">
+        <span class="emoji">🔍</span>
+        Stage 1 — Finding target region
+        <span class="step-badge badge-running" id="badge1">
+          <span class="spinner" style="width:12px;height:12px;border-width:2px"></span> Running
+        </span>
+      </div>
+      <div id="stage1Content">
+        <div class="spinner-wrap">
+          <div class="spinner"></div>
+          <span>Running target detection on full image...</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Connector arrow -->
+    <div class="connector" id="connector1">
+      <div class="arrow">⬇️</div>
+      <div class="label">Cropping to target region</div>
+    </div>
+
+    <!-- Step 2: Bullet detection -->
+    <div class="step" id="stepStage2">
+      <div class="step-header">
+        <span class="emoji">🔫</span>
+        Stage 2 — Detecting bullet holes
+        <span class="step-badge badge-running" id="badge2">
+          <span class="spinner" style="width:12px;height:12px;border-width:2px"></span> Running
+        </span>
+      </div>
+      <div id="stage2Content">
+        <div class="spinner-wrap">
+          <div class="spinner"></div>
+          <span>Analysing cropped region for bullet holes...</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Connector arrow -->
+    <div class="connector" id="connector2">
+      <div class="arrow">⬇️</div>
+      <div class="label">Results</div>
+    </div>
+
+    <!-- Summary -->
+    <div class="step" id="stepSummary">
+      <div class="step-header">
+        <span class="emoji">📊</span>
+        Summary
+        <span class="step-badge badge-done" id="badgeSummary">✅ Done</span>
+      </div>
+      <div id="summaryContent"></div>
+    </div>
+  </div>
+
+  <!-- Error display -->
+  <div class="error-box hidden" id="errorBox"></div>
+
+  <!-- Reset -->
+  <div style="text-align:center">
+    <button class="reset-btn hidden" id="resetBtn">🔄 Analyse another image</button>
+  </div>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const dropZone = $("#dropZone");
+const fileInput = $("#fileInput");
+const pipeline = $("#pipeline");
+const errorBox = $("#errorBox");
+const resetBtn = $("#resetBtn");
+
+const COLORS = [
+  "#6366f1","#f43f5e","#22c55e","#f59e0b","#06b6d4",
+  "#a855f7","#ec4899","#14b8a6","#eab308","#3b82f6",
+  "#ef4444","#10b981","#8b5cf6","#f97316",
+];
+
+function colorForClass(cid) { return COLORS[cid % COLORS.length]; }
+
+/* ── Drag & drop ── */
+["dragenter","dragover"].forEach(e =>
+  dropZone.addEventListener(e, ev => { ev.preventDefault(); dropZone.classList.add("drag-over"); })
+);
+["dragleave","drop"].forEach(e =>
+  dropZone.addEventListener(e, ev => { ev.preventDefault(); dropZone.classList.remove("drag-over"); })
+);
+dropZone.addEventListener("drop", ev => {
+  const f = ev.dataTransfer.files[0];
+  if (f && f.type.startsWith("image/")) handleFile(f);
+});
+fileInput.addEventListener("change", () => {
+  if (fileInput.files[0]) handleFile(fileInput.files[0]);
+});
+
+/* ── Main flow ── */
+async function handleFile(file) {
+  resetUI();
+  dropZone.classList.add("hidden");
+  pipeline.classList.remove("hidden");
+
+  /* Show step 1 immediately */
+  showStep("stepStage1");
+
+  const localUrl = URL.createObjectURL(file);
+  const origImg = new window.Image();
+  origImg.src = localUrl;
+  await origImg.decode();
+
+  const fd = new FormData();
+  fd.append("file", file);
+
+  let data;
+  try {
+    const res = await fetch("/predict/staged", { method: "POST", body: fd });
+    data = await res.json();
+  } catch (err) {
+    showError("Network error: " + err.message);
+    return;
+  }
+
+  if (!data.success) {
+    showError(data.error || "Unknown server error");
+    return;
+  }
+
+  /* ── Stage 1 result ── */
+  const s1 = data.stage1_detections || [];
+  setBadgeDone("badge1", s1.length + " target" + (s1.length !== 1 ? "s" : ""));
+  const stage1Html = renderCanvasWithBoxes(origImg, s1, "stage1Canvas", true);
+  const s1c = $("#stage1Content");
+  s1c.innerHTML = "";
+  s1c.appendChild(stage1Html);
+
+  if (s1.length === 0) {
+    s1c.insertAdjacentHTML("beforeend",
+      '<p style="margin-top:.75rem;color:var(--text-dim)">⚠️ No target detected. Try a clearer image.</p>');
+    resetBtn.classList.remove("hidden");
+    return;
+  }
+
+  await delay(600);
+
+  /* ── Show connector + Stage 2 ── */
+  showConnector("connector1");
+  await delay(400);
+  showStep("stepStage2");
+
+  const crops = data.crops || [];
+  const s2c = $("#stage2Content");
+  s2c.innerHTML = "";
+
+  let totalBullets = 0;
+  const classCount = {};
+
+  for (const crop of crops) {
+    const cropImg = new window.Image();
+    cropImg.src = "data:image/jpeg;base64," + crop.crop_image_base64;
+    await cropImg.decode();
+
+    const wrap = document.createElement("div");
+    wrap.style.marginBottom = "1rem";
+
+    const cropCanvas = renderCanvasWithBoxes(cropImg, crop.detections, "crop" + crop.crop_index, false);
+    wrap.appendChild(cropCanvas);
+
+    if (crop.detections.length > 0) {
+      const list = document.createElement("div");
+      list.className = "det-list";
+      for (const d of crop.detections) {
+        totalBullets++;
+        classCount[d.label] = (classCount[d.label] || 0) + 1;
+        const item = document.createElement("div");
+        item.className = "det-item";
+        item.innerHTML = `
+          <div class="det-color" style="background:${colorForClass(d.class_id)}"></div>
+          <span class="det-label">${d.label}</span>
+          <span class="det-score">${(d.score * 100).toFixed(1)}%</span>`;
+        list.appendChild(item);
       }
-    });
-  </script>
+      wrap.appendChild(list);
+    } else {
+      wrap.insertAdjacentHTML("beforeend",
+        '<p style="color:var(--text-dim);margin-top:.5rem">No bullet holes detected in this crop.</p>');
+    }
+    s2c.appendChild(wrap);
+  }
+
+  setBadgeDone("badge2", totalBullets + " detection" + (totalBullets !== 1 ? "s" : ""));
+
+  await delay(500);
+
+  /* ── Summary ── */
+  showConnector("connector2");
+  await delay(300);
+  showStep("stepSummary");
+
+  const sc = $("#summaryContent");
+  let statsHtml = '<div class="summary-grid">';
+  statsHtml += statCard(s1.length, "Targets");
+  statsHtml += statCard(totalBullets, "Bullet holes");
+  statsHtml += statCard(crops.length, "Crops");
+  statsHtml += "</div>";
+
+  if (Object.keys(classCount).length > 0) {
+    statsHtml += '<h4 style="margin-top:1rem;font-size:.9rem;font-weight:600">Class breakdown</h4>';
+    statsHtml += '<div class="det-list">';
+    for (const [label, cnt] of Object.entries(classCount).sort((a,b) => b[1]-a[1])) {
+      statsHtml += `<div class="det-item">
+        <span class="det-label">${label}</span>
+        <span class="det-score">×${cnt}</span>
+      </div>`;
+    }
+    statsHtml += "</div>";
+  }
+  sc.innerHTML = statsHtml;
+
+  resetBtn.classList.remove("hidden");
+}
+
+/* ── Helpers ── */
+function renderCanvasWithBoxes(img, dets, id, isFullImage) {
+  const maxW = 880;
+  const scale = img.naturalWidth > maxW ? maxW / img.naturalWidth : 1;
+  const w = Math.round(img.naturalWidth * scale);
+  const h = Math.round(img.naturalHeight * scale);
+
+  const wrap = document.createElement("div");
+  wrap.className = "canvas-wrap";
+  const canvas = document.createElement("canvas");
+  canvas.id = id;
+  canvas.width = w;
+  canvas.height = h;
+  wrap.appendChild(canvas);
+
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(img, 0, 0, w, h);
+
+  for (const d of dets) {
+    const [x1, y1, x2, y2] = d.box_xyxy.map(v => v * scale);
+    const bw = x2 - x1;
+    const bh = y2 - y1;
+    const color = isFullImage ? "#22c55e" : colorForClass(d.class_id);
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2.5;
+    ctx.strokeRect(x1, y1, bw, bh);
+
+    const label = `${d.label} ${(d.score*100).toFixed(0)}%`;
+    ctx.font = "bold 13px Inter, system-ui, sans-serif";
+    const tm = ctx.measureText(label);
+    const lh = 18;
+    const lx = x1;
+    const ly = y1 > lh + 4 ? y1 - lh - 2 : y1 + 2;
+
+    ctx.fillStyle = color;
+    ctx.globalAlpha = 0.85;
+    ctx.fillRect(lx, ly, tm.width + 8, lh);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = "#fff";
+    ctx.fillText(label, lx + 4, ly + 13);
+  }
+  return wrap;
+}
+
+function statCard(value, label) {
+  return `<div class="stat-card"><div class="value">${value}</div><div class="label">${label}</div></div>`;
+}
+
+function showStep(id) {
+  const el = document.getElementById(id);
+  if (el) requestAnimationFrame(() => el.classList.add("visible"));
+}
+function showConnector(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.add("visible");
+}
+function setBadgeDone(id, text) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.className = "step-badge badge-done";
+  el.innerHTML = "✅ " + text;
+}
+function showError(msg) {
+  errorBox.textContent = "❌ " + msg;
+  errorBox.classList.remove("hidden");
+  resetBtn.classList.remove("hidden");
+}
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function resetUI() {
+  pipeline.classList.add("hidden");
+  errorBox.classList.add("hidden");
+  resetBtn.classList.add("hidden");
+  dropZone.classList.remove("hidden");
+  fileInput.value = "";
+
+  for (const el of document.querySelectorAll(".step")) el.classList.remove("visible");
+  for (const el of document.querySelectorAll(".connector")) el.classList.remove("visible");
+
+  $("#badge1").className = "step-badge badge-running";
+  $("#badge1").innerHTML = '<span class="spinner" style="width:12px;height:12px;border-width:2px"></span> Running';
+  $("#badge2").className = "step-badge badge-running";
+  $("#badge2").innerHTML = '<span class="spinner" style="width:12px;height:12px;border-width:2px"></span> Running';
+
+  $("#stage1Content").innerHTML = `
+    <div class="spinner-wrap"><div class="spinner"></div>
+    <span>Running target detection on full image...</span></div>`;
+  $("#stage2Content").innerHTML = `
+    <div class="spinner-wrap"><div class="spinner"></div>
+    <span>Analysing cropped region for bullet holes...</span></div>`;
+  $("#summaryContent").innerHTML = "";
+}
+
+resetBtn.addEventListener("click", resetUI);
+</script>
 </body>
 </html>

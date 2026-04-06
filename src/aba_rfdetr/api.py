@@ -10,8 +10,8 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 
-from aba_rfdetr.inference import predict_image_bytes
-from aba_rfdetr.schemas import PredictResponse
+from aba_rfdetr.inference import predict_image_bytes, predict_image_bytes_staged
+from aba_rfdetr.schemas import PredictResponse, StagedPredictResponse
 
 _TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
@@ -49,6 +49,28 @@ async def predict(file: UploadFile = File(...)) -> PredictResponse:
         return PredictResponse(
             success=False,
             detections=[],
+            error=str(exc),
+            detail={"traceback": traceback.format_exc()},
+        )
+
+
+@app.post("/predict/staged", response_model=StagedPredictResponse)
+async def predict_staged(file: UploadFile = File(...)) -> StagedPredictResponse:
+    """Two-stage prediction returning intermediate crops and per-crop detections."""
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Expected an image file (image/*).")
+    try:
+        data = await file.read()
+        if not data:
+            raise HTTPException(status_code=400, detail="Empty file.")
+        return predict_image_bytes_staged(data)
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        return StagedPredictResponse(
+            success=False,
+            stage1_detections=[],
+            crops=[],
             error=str(exc),
             detail={"traceback": traceback.format_exc()},
         )

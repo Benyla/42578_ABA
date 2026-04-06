@@ -35,6 +35,13 @@ ENV/
 # Root-level checkpoints (pretrained downloads; keep under models/ if versioned)
 /*.pth
 data/images/
+data/rf_train/
+data/rf_train_stage1/
+data/rf_train_stage2/
+data/crops/
+data/instances_clean.json
+data/instances_stage1.json
+data/instances_stage2.json
 !data/README.md
 models/*.pth
 models/*.pt

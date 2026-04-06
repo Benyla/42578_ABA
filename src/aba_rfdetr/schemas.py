@@ -19,3 +19,28 @@ class PredictResponse(BaseModel):
     detections: list[DetectionItem]
     error: str | None = None
     detail: dict[str, Any] | None = None
+
+
+class CropResult(BaseModel):
+    """One target crop with its Stage 2 detections."""
+
+    crop_index: int
+    crop_box_xyxy: list[float] = Field(
+        description="Target crop region in original image coordinates."
+    )
+    crop_image_base64: str = Field(
+        description="JPEG-encoded crop image as base64 string."
+    )
+    detections: list[DetectionItem] = Field(
+        description="Stage 2 detections in crop-local coordinates."
+    )
+
+
+class StagedPredictResponse(BaseModel):
+    success: bool
+    stage1_detections: list[DetectionItem] = Field(
+        description="Target detections from Stage 1 on full image."
+    )
+    crops: list[CropResult] = Field(default_factory=list)
+    error: str | None = None
+    detail: dict[str, Any] | None = None

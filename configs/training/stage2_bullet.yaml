@@ -1,33 +1,31 @@
-# RF-DETR training — matches Roboflow-style preprocessing/augmentation (see comments).
-# Windows + CUDA: install train extras, then:
-#   uv sync --extra train
-#   uv run aba-train prepare-data
-#   uv run aba-train train --device cuda
+# Stage 2: Bullet detector on cropped Target regions — 12 classes, 50 epochs.
+# Usage: uv run python scripts/train.py --config configs/training/stage2_bullet.yaml --device cuda
 
 device: cuda
 
 prepare:
   enabled: true
   raw_data_root: data
-  roboflow_layout_dir: data/rf_train
+  roboflow_layout_dir: data/rf_train_stage2
   force: false
   val_fraction: 0.2
   seed: 42
+  annotations_file: instances_stage2.json
+  images_subdir: crops
 
-# Roboflow: "Outputs per training example: 2" — duplicate each image in the train set for one epoch.
 repeat_train: 2
 
-# RFDETRMedium: set resolution divisible by 64 (e.g. 704). Higher than default uses more VRAM — lower batch_size if needed.
 model:
   class: RFDETRMedium
-  num_classes: 14
+  num_classes: 12
   resolution: 704
   pretrain_weights: rf-detr-medium.pth
 
 training:
   dataset_file: roboflow
-  dataset_dir: data/rf_train
+  dataset_dir: data/rf_train_stage2
   output_dir: runs/train
+  run: stage2_bullet
   epochs: 50
   lr: 1.0e-4
   lr_encoder: 1.5e-4
@@ -43,8 +41,6 @@ training:
   project: aba-rfdetr
   checkpoint_interval: 1
   eval_interval: 1
-  # Order: flip → zoom crop (Roboflow 0–5%) → rotate ±5° → shear → saturation → brightness/exposure.
-  # Wrapped in Sequential so TrainConfig (dict) matches rfdetr Albumentations loading.
   aug_config:
     Sequential:
       transforms:

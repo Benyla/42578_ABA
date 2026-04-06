@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -63,7 +64,14 @@ def run_training(
     if "dataset_dir" in train_kwargs:
         train_kwargs["dataset_dir"] = _abs_str(train_kwargs["dataset_dir"], root)
     if "output_dir" in train_kwargs:
-        train_kwargs["output_dir"] = _abs_str(train_kwargs["output_dir"], root)
+        base_output = Path(_abs_str(train_kwargs["output_dir"], root))
+        run_name = train_block.get("run", "")
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        subfolder = f"{ts}_{run_name}" if run_name else ts
+        actual_output = base_output / subfolder
+        actual_output.mkdir(parents=True, exist_ok=True)
+        train_kwargs["output_dir"] = str(actual_output)
+        print(f"\n>>> Run output directory: {actual_output}\n")
 
     if dry_run:
         TrainConfig(**train_kwargs)
@@ -81,7 +89,15 @@ def run_training(
             raw_data = root / raw_data
         if not layout.is_absolute():
             layout = root / layout
-        prepare_roboflow_layout(raw_data, layout, force=bool(prep.get("force", False)))
+        prepare_roboflow_layout(
+            raw_data,
+            layout,
+            force=bool(prep.get("force", False)),
+            val_fraction=float(prep.get("val_fraction", 0.2)),
+            seed=int(prep.get("seed", 42)),
+            annotations_file=str(prep.get("annotations_file", "instances.json")),
+            images_subdir=str(prep.get("images_subdir", "images")),
+        )
 
     model_cfg = raw.get("model") or {}
     model_cls = _import_model_class(model_cls_name)
