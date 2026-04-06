@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RF-DETR — upload an image</title>
+  <style>
+    :root {
+      font-family: system-ui, sans-serif;
+      line-height: 1.5;
+      color: #1a1a1a;
+      background: #f6f7f9;
+    }
+    body { max-width: 52rem; margin: 2rem auto; padding: 0 1rem; }
+    h1 { font-size: 1.35rem; font-weight: 600; }
+    p { color: #444; }
+    .card {
+      background: #fff;
+      border-radius: 8px;
+      padding: 1.25rem 1.5rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,.08);
+    }
+    button {
+      margin-top: 0.75rem;
+      padding: 0.5rem 1rem;
+      font-size: 1rem;
+      border-radius: 6px;
+      border: none;
+      background: #2563eb;
+      color: #fff;
+      cursor: pointer;
+    }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    pre {
+      margin-top: 1rem;
+      padding: 1rem;
+      background: #0f172a;
+      color: #e2e8f0;
+      border-radius: 6px;
+      overflow: auto;
+      font-size: 0.85rem;
+    }
+    .err { color: #b91c1c; }
+  </style>
+</head>
+<body>
+  <h1>Object detection (RF-DETR)</h1>
+  <p>Upload an image. The API returns detected objects with labels, scores, and bounding boxes (xyxy pixels).</p>
+
+  <div class="card">
+    <form id="f">
+      <input type="file" id="file" accept="image/*" required />
+      <div><button type="submit" id="btn">Run detection</button></div>
+    </form>
+    <pre id="out">Results will appear here.</pre>
+  </div>
+
+  <script>
+    const form = document.getElementById("f");
+    const btn = document.getElementById("btn");
+    const out = document.getElementById("out");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const fileInput = document.getElementById("file");
+      if (!fileInput.files.length) return;
+      const fd = new FormData();
+      fd.append("file", fileInput.files[0]);
+      btn.disabled = true;
+      out.textContent = "Loading…";
+      try {
+        const res = await fetch("/predict", { method: "POST", body: fd });
+        const data = await res.json();
+        out.textContent = JSON.stringify(data, null, 2);
+      } catch (err) {
+        out.innerHTML = '<span class="err">' + String(err) + "</span>";
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+# RF-DETR inference defaults. Override paths with env MODEL_PATH / ABA_CONFIG_PATH.
+
+# One of: RFDETRNano, RFDETRSmall, RFDETRMedium, RFDETRBase, RFDETRLarge (see rfdetr package).
+model_class: RFDETRBase
+
+# Optional: path to a trained .pth checkpoint under models/ or absolute path.
+# If null, the model uses its default pretrained weights (downloads on first run).
+checkpoint_path: null
+
+# Number of classes the head was trained with (COCO detection = 80).
+num_classes: 80
+
+# Minimum confidence for returned boxes.
+score_threshold: 0.35
+
+# Optional JSON file: list of class name strings in class index order.
+# If null, standard COCO 80 class names are used for labeling.
+class_names_file: null

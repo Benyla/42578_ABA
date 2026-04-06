@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aba-rfdetr"
+version = "0.1.0"
+description = "RF-DETR inference service with upload UI and COCO/training scaffolding."
+readme = "README.md"
+requires-python = ">=3.10,<3.14"
+dependencies = [
+  "rfdetr>=1.6.0",
+  "fastapi>=0.115.0",
+  "uvicorn[standard]>=0.32.0",
+  "python-multipart>=0.0.9",
+  "jinja2>=3.1.0",
+  "pyyaml>=6.0",
+  "typer>=0.12.0",
+  "pillow>=10.0.0",
+  "numpy>=1.24.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0.0",
+  "httpx>=0.27.0",
+  "ruff>=0.8.0",
+]
+train = [
+    "albumentations>=2.0.8",
+    "pycocotools>=2.0.11",
+    "pytorch-lightning>=2.6.1",
+    "tensorboard>=2.20.0",
+]
+
+[project.scripts]
+aba-train = "aba_rfdetr.train:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+aba_rfdetr = ["templates/*.html"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

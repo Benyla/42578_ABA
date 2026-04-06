@@ -1,0 +1,73 @@
+# RF-DETR training — matches Roboflow-style preprocessing/augmentation (see comments).
+# Windows + CUDA: install train extras, then:
+#   uv sync --extra train
+#   uv run aba-train prepare-data
+#   uv run aba-train train --device cuda
+
+device: cuda
+
+prepare:
+  enabled: true
+  raw_data_root: data
+  roboflow_layout_dir: data/rf_train
+  force: false
+
+# Roboflow: "Outputs per training example: 2" — duplicate each image in the train set for one epoch.
+repeat_train: 2
+
+# RFDETRMedium: set resolution divisible by 64 (e.g. 704). Higher than default uses more VRAM — lower batch_size if needed.
+model:
+  class: RFDETRMedium
+  num_classes: 14
+  resolution: 704
+  pretrain_weights: rf-detr-medium.pth
+
+training:
+  dataset_file: roboflow
+  dataset_dir: data/rf_train
+  output_dir: runs/train
+  epochs: 50
+  lr: 1.0e-4
+  lr_encoder: 1.5e-4
+  batch_size: 4
+  grad_accum_steps: 4
+  num_workers: 4
+  multi_scale: false
+  expanded_scales: false
+  square_resize_div_64: true
+  do_random_resize_via_padding: false
+  tensorboard: true
+  wandb: false
+  checkpoint_interval: 5
+  eval_interval: 1
+  # Order: flip → zoom crop (Roboflow 0–5%) → rotate ±5° → shear → saturation → brightness/exposure.
+  # Wrapped in Sequential so TrainConfig (dict) matches rfdetr Albumentations loading.
+  aug_config:
+    Sequential:
+      transforms:
+        - HorizontalFlip:
+            p: 0.5
+        - RandomResizedCrop:
+            size: [704, 704]
+            scale: [0.95, 1.0]
+            ratio: [1.0, 1.0]
+            p: 0.5
+        - Rotate:
+            limit: 5
+            p: 0.5
+        - Affine:
+            scale: [1.0, 1.0]
+            rotate: 0
+            shear:
+              x: [-2, 2]
+              y: [-2, 2]
+            p: 0.5
+        - HueSaturationValue:
+            hue_shift_limit: 0
+            sat_shift_limit: [-6, 6]
+            val_shift_limit: 0
+            p: 0.5
+        - RandomBrightnessContrast:
+            brightness_limit: [-0.15, 0.15]
+            contrast_limit: [-0.05, 0.05]
+            p: 0.5
