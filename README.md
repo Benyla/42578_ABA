@@ -51,18 +51,20 @@ This codebase is the **implementation scaffold** for that work: **RF-DETR**-base
 | Topic | Where to look |
 |--------|----------------|
 | Run API locally, inference config | [`configs/inference.yaml`](configs/inference.yaml) |
-| Training (prepare data, train, augmentations) | [`training/README.md`](training/README.md), [`configs/training/dataset.yaml`](configs/training/dataset.yaml) |
+| Training (Stage 1 Target, Stage 2 Bullet) | [`configs/training/stage1_target.yaml`](configs/training/stage1_target.yaml), [`configs/training/stage2_bullet.yaml`](configs/training/stage2_bullet.yaml) |
 | Data layout | [`data/README.md`](data/README.md) |
-| Deploy to Google Cloud | [`docs/CLOUD_CHECKLIST.md`](docs/CLOUD_CHECKLIST.md) |
+| Deploy to HF Spaces | [`scripts/deploy_hf.py`](scripts/deploy_hf.py) |
+
+**Live demo:** [huggingface.co/spaces/Benyla1/aba-target-detector](https://huggingface.co/spaces/Benyla1/aba-target-detector)
 
 **Quick start (local API):** requires Python 3.10+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
 uv sync --all-extras
-uv run uvicorn aba_rfdetr.api:app --host 0.0.0.0 --port 8080
+uv run python -m uvicorn aba_rfdetr.api:app --host 127.0.0.1 --port 8000
 ```
 
-Open `http://127.0.0.1:8080/` to try uploads, or `POST /predict` with form field `file`.
+Open `http://127.0.0.1:8000/` to try uploads, or `POST /predict/staged` with form field `file`.
 
 Run tests: `uv run pytest` (optional: `uv run ruff check src tests`).
 

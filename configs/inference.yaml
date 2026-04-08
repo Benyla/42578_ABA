@@ -3,14 +3,14 @@
 
 stage1:
   model_class: RFDETRMedium
-  checkpoint_path: runs/train/20260406_181946_stage1_target/checkpoint_best_ema.pth
+  checkpoint_path: models/stage1_target.pth
   num_classes: 1
   score_threshold: 0.35
 
 stage2:
   model_class: RFDETRMedium
-  checkpoint_path: runs/train/checkpoint_best_ema.pth
-  num_classes: 14          # temporary: old 14-class model until a dedicated Stage 2 is trained
+  checkpoint_path: models/stage2_bullet.pth
+  num_classes: 12
   score_threshold: 0.35
   crop_padding: 0.05       # 5% padding around Target bbox before running Stage 2
 
