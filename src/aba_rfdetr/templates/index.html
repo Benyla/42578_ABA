@@ -235,6 +235,29 @@
   <!-- Pipeline steps (hidden until running) -->
   <div class="pipeline hidden" id="pipeline">
 
+    <!-- Step 0: Greyscale preprocessing -->
+    <div class="step" id="stepGrey">
+      <div class="step-header">
+        <span class="emoji">🌑</span>
+        Preprocessing — Convert to greyscale
+        <span class="step-badge badge-running" id="badgeGrey">
+          <span class="spinner" style="width:12px;height:12px;border-width:2px"></span> Running
+        </span>
+      </div>
+      <div id="greyContent">
+        <div class="spinner-wrap">
+          <div class="spinner"></div>
+          <span>Converting image to greyscale...</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Connector arrow -->
+    <div class="connector" id="connectorGrey">
+      <div class="arrow">⬇️</div>
+      <div class="label">Greyscale image to detector</div>
+    </div>
+
     <!-- Step 1: Target detection -->
     <div class="step" id="stepStage1">
       <div class="step-header">
@@ -247,7 +270,7 @@
       <div id="stage1Content">
         <div class="spinner-wrap">
           <div class="spinner"></div>
-          <span>Running target detection on full image...</span>
+          <span>Running target detection on greyscale image...</span>
         </div>
       </div>
     </div>
@@ -338,8 +361,8 @@ async function handleFile(file) {
   dropZone.classList.add("hidden");
   pipeline.classList.remove("hidden");
 
-  /* Show step 1 immediately */
-  showStep("stepStage1");
+  /* Show greyscale step immediately */
+  showStep("stepGrey");
 
   const localUrl = URL.createObjectURL(file);
   const origImg = new window.Image();
@@ -363,10 +386,30 @@ async function handleFile(file) {
     return;
   }
 
+  /* ── Greyscale preprocessing result ── */
+  const greyImg = new window.Image();
+  if (data.greyscale_image_base64) {
+    greyImg.src = "data:image/jpeg;base64," + data.greyscale_image_base64;
+    await greyImg.decode();
+  }
+  setBadgeDone("badgeGrey", "converted");
+  const gc = $("#greyContent");
+  gc.innerHTML = "";
+  if (data.greyscale_image_base64) {
+    const greyCanvas = renderCanvasWithBoxes(greyImg, [], "greyCanvas", false);
+    gc.appendChild(greyCanvas);
+  }
+
+  await delay(400);
+  showConnector("connectorGrey");
+  await delay(300);
+
   /* ── Stage 1 result ── */
+  showStep("stepStage1");
   const s1 = data.stage1_detections || [];
   setBadgeDone("badge1", s1.length + " target" + (s1.length !== 1 ? "s" : ""));
-  const stage1Html = renderCanvasWithBoxes(origImg, s1, "stage1Canvas", true);
+  const displayImg = data.greyscale_image_base64 ? greyImg : origImg;
+  const stage1Html = renderCanvasWithBoxes(displayImg, s1, "stage1Canvas", true);
   const s1c = $("#stage1Content");
   s1c.innerHTML = "";
   s1c.appendChild(stage1Html);
@@ -537,14 +580,19 @@ function resetUI() {
   for (const el of document.querySelectorAll(".step")) el.classList.remove("visible");
   for (const el of document.querySelectorAll(".connector")) el.classList.remove("visible");
 
+  $("#badgeGrey").className = "step-badge badge-running";
+  $("#badgeGrey").innerHTML = '<span class="spinner" style="width:12px;height:12px;border-width:2px"></span> Running';
   $("#badge1").className = "step-badge badge-running";
   $("#badge1").innerHTML = '<span class="spinner" style="width:12px;height:12px;border-width:2px"></span> Running';
   $("#badge2").className = "step-badge badge-running";
   $("#badge2").innerHTML = '<span class="spinner" style="width:12px;height:12px;border-width:2px"></span> Running';
 
+  $("#greyContent").innerHTML = `
+    <div class="spinner-wrap"><div class="spinner"></div>
+    <span>Converting image to greyscale...</span></div>`;
   $("#stage1Content").innerHTML = `
     <div class="spinner-wrap"><div class="spinner"></div>
-    <span>Running target detection on full image...</span></div>`;
+    <span>Running target detection on greyscale image...</span></div>`;
   $("#stage2Content").innerHTML = `
     <div class="spinner-wrap"><div class="spinner"></div>
     <span>Analysing cropped region for bullet holes...</span></div>`;

@@ -216,12 +216,14 @@ def predict_pil_image(image: Image.Image) -> list[DetectionItem]:
     crop_padding = float(s2_cfg.get("crop_padding", 0.10))
     names = get_class_names()
 
+    grey_image = _to_greyscale_rgb(image)
+
     with _MODEL_LOCK:
         s1_model = _get_stage1_model()
         s2_model = _get_stage2_model()
 
-    # --- Stage 1: detect Targets on full image ---
-    s1_det = s1_model.predict(image, threshold=s1_threshold)
+    # --- Stage 1: detect Targets on greyscale image ---
+    s1_det = s1_model.predict(grey_image, threshold=s1_threshold)
     items: list[DetectionItem] = []
 
     if s1_det is None or len(s1_det) == 0:
@@ -239,9 +241,9 @@ def predict_pil_image(image: Image.Image) -> list[DetectionItem]:
             box_xyxy=[x1, y1, x2, y2],
         ))
 
-        # --- Stage 2: detect bullets on crop ---
+        # --- Stage 2: detect bullets on greyscale crop ---
         cx1, cy1, cx2, cy2 = _padded_crop_box(x1, y1, x2, y2, img_w, img_h, crop_padding)
-        crop = image.crop((cx1, cy1, cx2, cy2))
+        crop = _to_greyscale_rgb(image.crop((cx1, cy1, cx2, cy2)))
         s2_det = s2_model.predict(crop, threshold=s2_threshold)
 
         if s2_det is None or len(s2_det) == 0:
@@ -282,17 +284,24 @@ def predict_pil_image_staged(image: Image.Image) -> StagedPredictResponse:
     crop_padding = float(s2_cfg.get("crop_padding", 0.10))
     s2_names = _stage2_class_names()
 
+    grey_image = _to_greyscale_rgb(image)
+
+    grey_buf = io.BytesIO()
+    grey_image.save(grey_buf, format="JPEG", quality=90)
+    greyscale_b64 = base64.b64encode(grey_buf.getvalue()).decode("ascii")
+
     with _MODEL_LOCK:
         s1_model = _get_stage1_model()
         s2_model = _get_stage2_model()
 
-    s1_det = s1_model.predict(image, threshold=s1_threshold)
+    s1_det = s1_model.predict(grey_image, threshold=s1_threshold)
     stage1_items: list[DetectionItem] = []
     crops: list[CropResult] = []
 
     if s1_det is None or len(s1_det) == 0:
         return StagedPredictResponse(
-            success=True, stage1_detections=[], crops=[]
+            success=True, stage1_detections=[], crops=[],
+            greyscale_image_base64=greyscale_b64,
         )
 
     img_w, img_h = image.size
@@ -310,7 +319,7 @@ def predict_pil_image_staged(image: Image.Image) -> StagedPredictResponse:
         cx1, cy1, cx2, cy2 = _padded_crop_box(
             x1, y1, x2, y2, img_w, img_h, crop_padding
         )
-        crop = image.crop((cx1, cy1, cx2, cy2))
+        crop = _to_greyscale_rgb(image.crop((cx1, cy1, cx2, cy2)))
 
         buf = io.BytesIO()
         crop.save(buf, format="JPEG", quality=90)
@@ -341,7 +350,13 @@ def predict_pil_image_staged(image: Image.Image) -> StagedPredictResponse:
         success=True,
         stage1_detections=stage1_items,
         crops=crops,
+        greyscale_image_base64=greyscale_b64,
     )
+
+
+def _to_greyscale_rgb(img: Image.Image) -> Image.Image:
+    """Convert to greyscale while keeping 3 RGB channels (models expect 3-ch input)."""
+    return img.convert("L").convert("RGB")
 
 
 def _open_image(data: bytes) -> Image.Image:

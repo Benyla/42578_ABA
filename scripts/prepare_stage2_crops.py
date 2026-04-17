@@ -9,7 +9,7 @@ import json
 from collections import defaultdict
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 DATA_DIR = Path("data")
 SRC = DATA_DIR / "instances_clean.json"
@@ -88,6 +88,11 @@ def _remap_bbox(
     return (new_x, new_y, clipped_w, clipped_h)
 
 
+def _to_grayscale_pil(img: Image.Image) -> Image.Image:
+    """Convert to grayscale, returned as 3-channel RGB."""
+    return img.convert("L").convert("RGB")
+
+
 def main() -> None:
     if not SRC.is_file():
         raise FileNotFoundError(f"{SRC} not found. Run scripts/data_quality.py first.")
@@ -109,7 +114,7 @@ def main() -> None:
     new_annotations: list[dict] = []
     crop_id = 0
     ann_id = 0
-    skipped_no_bullets = 0
+    empty_crops = 0
 
     for img in coco["images"]:
         img_id = img["id"]
@@ -122,7 +127,7 @@ def main() -> None:
             print(f"[WARN] Skipping missing image: {img_path}")
             continue
 
-        pil_img = Image.open(img_path)
+        pil_img = ImageOps.exif_transpose(Image.open(img_path))
         img_w, img_h = pil_img.size
 
         non_target_anns = [a for a in anns_by_image[img_id]
@@ -153,13 +158,13 @@ def main() -> None:
                 ann_id += 1
 
             if not crop_anns:
-                skipped_no_bullets += 1
-                continue
+                empty_crops += 1
 
             suffix = f"_crop{t_idx}" if len(targets) > 1 else "_crop"
             stem = Path(img["file_name"]).stem
             crop_fname = f"{stem}{suffix}.jpg"
             cropped = pil_img.crop((cx1, cy1, cx2, cy2))
+            cropped = _to_grayscale_pil(cropped)
             cropped.save(CROPS_DIR / crop_fname, quality=95)
 
             new_images.append({
@@ -180,7 +185,7 @@ def main() -> None:
     print(f"Stage 2 dataset: {len(new_images)} crops, "
           f"{len(new_annotations)} annotations, "
           f"12 categories -> {DST}")
-    print(f"  Skipped {skipped_no_bullets} crops with zero bullet annotations.")
+    print(f"  Kept {empty_crops} crops with zero bullet annotations.")
     print(f"  Crop images saved to {CROPS_DIR}/")
 
 

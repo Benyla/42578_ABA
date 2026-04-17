@@ -10,8 +10,9 @@ SRC = DATA_DIR / "instances.json"
 DST = DATA_DIR / "instances_clean.json"
 IMAGES_DIR = DATA_DIR / "images"
 
-TARGET_CAT_ID = 12
 PHANTOM_CAT_NAME = "Shooting-Discs"
+TARGET_CAT_NAME = "Target"
+BLACK_CONTOUR_CAT_NAME = "black_contour"
 
 
 def main() -> None:
@@ -25,6 +26,15 @@ def main() -> None:
     print("=" * 60)
     print(f"Source: {SRC}")
     print(f"Images: {len(images)}  Annotations: {len(annotations)}  Categories: {len(categories)}")
+
+    # Resolve category ids by name (robust to id changes)
+    name_to_cat = {c["name"]: c for c in categories}
+    if TARGET_CAT_NAME not in name_to_cat:
+        raise SystemExit(f"Missing category named {TARGET_CAT_NAME!r} in {SRC}")
+    if BLACK_CONTOUR_CAT_NAME not in name_to_cat:
+        raise SystemExit(f"Missing category named {BLACK_CONTOUR_CAT_NAME!r} in {SRC}")
+    target_cat_id = int(name_to_cat[TARGET_CAT_NAME]["id"])
+    black_contour_cat_id = int(name_to_cat[BLACK_CONTOUR_CAT_NAME]["id"])
 
     # --- Check 1: bbox type coercion ---
     str_bbox_count = 0
@@ -48,30 +58,85 @@ def main() -> None:
     else:
         print(f"[OK] All {len(json_files)} image files exist on disk.")
 
-    # --- Check 3: images without Target annotation ---
-    target_imgs = {a["image_id"] for a in annotations if a["category_id"] == TARGET_CAT_ID}
+    # --- Check 3: keep only images with exactly 1 Target and 1 black_contour ---
     id_to_img = {img["id"]: img for img in images}
-    no_target = [img for img in images if img["id"] not in target_imgs]
-    if no_target:
-        print(f"\n[FIX] Removing {len(no_target)} images with no Target annotation:")
-        for img in no_target:
-            print(f"       {img['file_name']}")
-        drop_ids = {img["id"] for img in no_target}
-        images = [img for img in images if img["id"] not in drop_ids]
-        annotations = [a for a in annotations if a["image_id"] not in drop_ids]
-    else:
-        print("[OK] Every image has at least one Target annotation.")
-
-    # --- Check 4: images with multiple Targets ---
-    target_counts: dict[int, int] = defaultdict(int)
+    per_img_counts: dict[int, dict[int, int]] = defaultdict(lambda: defaultdict(int))
     for a in annotations:
-        if a["category_id"] == TARGET_CAT_ID:
-            target_counts[a["image_id"]] += 1
-    multi = {img_id: cnt for img_id, cnt in target_counts.items() if cnt > 1}
-    if multi:
-        print(f"\n[INFO] {len(multi)} images have multiple Target bboxes (kept as-is):")
-        for img_id, cnt in sorted(multi.items()):
-            print(f"       {id_to_img[img_id]['file_name']}  ({cnt} targets)")
+        per_img_counts[int(a["image_id"])][int(a["category_id"])] += 1
+
+    keep_ids: set[int] = set()
+    drop_ids: set[int] = set()
+    for img in images:
+        img_id = int(img["id"])
+        counts = per_img_counts.get(img_id, {})
+        t = int(counts.get(target_cat_id, 0))
+        bc = int(counts.get(black_contour_cat_id, 0))
+        if t == 1 and bc == 1:
+            keep_ids.add(img_id)
+        else:
+            drop_ids.add(img_id)
+
+    if drop_ids:
+        # Provide a small breakdown for transparency
+        missing_target = 0
+        missing_bc = 0
+        multi_target = 0
+        multi_bc = 0
+        other = 0
+        dropped_missing_target: list[str] = []
+        dropped_multi_target: list[str] = []
+        dropped_missing_bc: list[str] = []
+        dropped_multi_bc: list[str] = []
+        dropped_other: list[str] = []
+        for img_id in drop_ids:
+            counts = per_img_counts.get(img_id, {})
+            t = int(counts.get(target_cat_id, 0))
+            bc = int(counts.get(black_contour_cat_id, 0))
+            if t == 0:
+                missing_target += 1
+                dropped_missing_target.append(id_to_img[img_id]["file_name"])
+            elif t > 1:
+                multi_target += 1
+                dropped_multi_target.append(id_to_img[img_id]["file_name"])
+            if bc == 0:
+                missing_bc += 1
+                dropped_missing_bc.append(id_to_img[img_id]["file_name"])
+            elif bc > 1:
+                multi_bc += 1
+                dropped_multi_bc.append(id_to_img[img_id]["file_name"])
+            if not (t == 0 or t > 1 or bc == 0 or bc > 1):
+                other += 1
+                dropped_other.append(id_to_img[img_id]["file_name"])
+
+        print(
+            f"\n[FIX] Keeping only images with exactly 1 {TARGET_CAT_NAME} and 1 {BLACK_CONTOUR_CAT_NAME}.\n"
+            f"      Dropped {len(drop_ids)} / {len(images)} images.\n"
+            f"      missing_target={missing_target}\n"
+            f"      multi_target={multi_target}\n"
+            f"      missing_black_contour={missing_bc}\n"
+            f"      multi_black_contour={multi_bc}\n"
+            f"      other={other}"
+        )
+
+        def _print_list(title: str, items: list[str], limit: int = 200) -> None:
+            if not items:
+                return
+            print(f"\n      {title} ({len(items)}):")
+            for name in sorted(items)[:limit]:
+                print(f"        - {name}")
+            if len(items) > limit:
+                print(f"        ... ({len(items) - limit} more)")
+
+        _print_list("Dropped (missing Target)", dropped_missing_target)
+        _print_list("Dropped (multiple Targets)", dropped_multi_target)
+        _print_list("Dropped (missing black_contour)", dropped_missing_bc)
+        _print_list("Dropped (multiple black_contour)", dropped_multi_bc)
+        _print_list("Dropped (other)", dropped_other)
+
+        images = [img for img in images if int(img["id"]) in keep_ids]
+        annotations = [a for a in annotations if int(a["image_id"]) in keep_ids]
+    else:
+        print(f"[OK] All images have exactly 1 {TARGET_CAT_NAME} and 1 {BLACK_CONTOUR_CAT_NAME}.")
 
     # --- Check 5: drop phantom category ---
     phantom = [c for c in categories if c["name"] == PHANTOM_CAT_NAME]
@@ -98,6 +163,12 @@ def main() -> None:
     print("\nAnnotation distribution:")
     for c in categories:
         print(f"  {c['name']} (id={c['id']}): {cat_counts.get(c['id'], 0)}")
+
+    # Explicit summary block (easy to copy/paste)
+    print("\nProduced data/instances_clean.json with:")
+    print(f"{len(images)} images")
+    print(f"{cat_counts.get(target_cat_id, 0)} {TARGET_CAT_NAME} annotations")
+    print(f"{cat_counts.get(black_contour_cat_id, 0)} {BLACK_CONTOUR_CAT_NAME} annotations")
 
     # --- Write ---
     clean = dict(coco)

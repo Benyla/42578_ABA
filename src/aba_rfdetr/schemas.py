@@ -38,6 +38,10 @@ class CropResult(BaseModel):
 
 class StagedPredictResponse(BaseModel):
     success: bool
+    greyscale_image_base64: str | None = Field(
+        default=None,
+        description="Greyscale-converted full image as base64 JPEG (shown as preprocessing step).",
+    )
     stage1_detections: list[DetectionItem] = Field(
         description="Target detections from Stage 1 on full image."
     )

@@ -9,6 +9,7 @@ from collections import defaultdict
 from pathlib import Path
 
 import typer
+from PIL import Image, ImageOps
 
 
 def _split_coco(
@@ -45,6 +46,13 @@ def _split_coco(
     return train_coco, val_coco
 
 
+def _to_grayscale(src: Path, dst: Path) -> None:
+    """EXIF-correct, convert to grayscale, and save as JPEG."""
+    img = ImageOps.exif_transpose(Image.open(src))
+    gray_rgb = img.convert("L").convert("RGB")
+    gray_rgb.save(dst, quality=95)
+
+
 def prepare_roboflow_layout(
     raw_data_root: Path,
     layout_root: Path,
@@ -79,7 +87,14 @@ def prepare_roboflow_layout(
             return
 
     coco = json.loads(ann_src.read_text(encoding="utf-8"))
-    train_coco, val_coco = _split_coco(coco, val_fraction=val_fraction, seed=seed)
+
+    def _to_jpg_name(name: str) -> str:
+        return Path(name).with_suffix(".jpg").name
+
+    coco_jpg = dict(coco)
+    coco_jpg["images"] = [dict(img, file_name=_to_jpg_name(img["file_name"])) for img in coco["images"]]
+
+    train_coco, val_coco = _split_coco(coco_jpg, val_fraction=val_fraction, seed=seed)
 
     if layout_root.exists():
         shutil.rmtree(layout_root)
@@ -93,20 +108,24 @@ def prepare_roboflow_layout(
         json.dumps(val_coco), encoding="utf-8"
     )
 
-    train_fnames = {img["file_name"] for img in train_coco["images"]}
-    val_fnames = {img["file_name"] for img in val_coco["images"]}
+    train_src_names = {_to_jpg_name(img["file_name"]) for img in train_coco["images"]}
+    val_src_names = {_to_jpg_name(img["file_name"]) for img in val_coco["images"]}
 
     exts = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
     t_count = v_count = 0
     for f in sorted(images_src.iterdir()):
         if f.suffix.lower() not in exts:
             continue
-        if f.name in train_fnames:
-            shutil.copy2(f, train_dir / f.name)
+        out_name = _to_jpg_name(f.name)
+        dst = None
+        if out_name in train_src_names:
+            dst = train_dir / out_name
             t_count += 1
-        elif f.name in val_fnames:
-            shutil.copy2(f, valid_dir / f.name)
+        elif out_name in val_src_names:
+            dst = valid_dir / out_name
             v_count += 1
+        if dst is not None:
+            _to_grayscale(f, dst)
 
     if t_count == 0:
         raise RuntimeError(f"No training images found under {images_src}")
