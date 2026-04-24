@@ -83,7 +83,23 @@ def _build_model(stage_cfg: dict[str, Any]) -> Any:
     kwargs: dict[str, Any] = {"num_classes": num_classes}
     if ck_resolved:
         kwargs["pretrain_weights"] = ck_resolved
-    return model_cls(**kwargs)
+    m = model_cls(**kwargs)
+
+    # Force CPU unless explicitly overridden.
+    #
+    # rfdetr defaults to "mps" on Apple Silicon when available, but that can
+    # fail depending on the PyTorch build/runtime. CPU is the most portable
+    # option (and matches Hugging Face Spaces' free tier).
+    forced = os.environ.get("ABA_DEVICE", "").strip().lower()
+    if forced == "":
+        forced = "cpu"
+    try:
+        if hasattr(m, "model") and hasattr(m.model, "device"):
+            m.model.device = forced  # type: ignore[attr-defined]
+    except Exception:
+        pass
+
+    return m
 
 
 def _load_class_names(cfg: dict[str, Any]) -> list[str]:
