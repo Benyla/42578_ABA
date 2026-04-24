@@ -215,6 +215,53 @@
     }
 
     .hidden { display: none !important; }
+
+    /* Type classification badge */
+    .type-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: .5rem;
+      margin-top: .75rem;
+      padding: .55rem 1rem;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: .95rem;
+      font-weight: 600;
+    }
+    .type-badge .type-value {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .type-badge .type-prob {
+      color: var(--text-dim);
+      font-size: .8rem;
+      font-weight: 500;
+    }
+
+    /* Highlight card for the final score */
+    .score-card {
+      background: linear-gradient(135deg, rgba(99,102,241,.15), rgba(34,197,94,.12));
+      border: 1px solid var(--accent);
+      border-radius: 12px;
+      padding: 1rem 1.25rem;
+      text-align: center;
+      margin-bottom: 1rem;
+    }
+    .score-card .score-value {
+      font-size: 2.6rem;
+      font-weight: 800;
+      color: var(--accent);
+      line-height: 1.1;
+    }
+    .score-card .score-label {
+      font-size: .85rem;
+      color: var(--text-dim);
+      margin-top: .25rem;
+      letter-spacing: .03em;
+      text-transform: uppercase;
+    }
   </style>
 </head>
 <body>
@@ -279,6 +326,29 @@
     <div class="connector" id="connector1">
       <div class="arrow">⬇️</div>
       <div class="label">Cropping to target region</div>
+    </div>
+
+    <!-- Step 1b: Target type classification -->
+    <div class="step" id="stepType">
+      <div class="step-header">
+        <span class="emoji">🎯</span>
+        Classify target type
+        <span class="step-badge badge-running" id="badgeType">
+          <span class="spinner" style="width:12px;height:12px;border-width:2px"></span> Running
+        </span>
+      </div>
+      <div id="typeContent">
+        <div class="spinner-wrap">
+          <div class="spinner"></div>
+          <span>Classifying target type on cropped region...</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Connector arrow -->
+    <div class="connector" id="connectorType">
+      <div class="arrow">⬇️</div>
+      <div class="label">Type identified — scanning for bullet holes</div>
     </div>
 
     <!-- Step 2: Bullet detection -->
@@ -423,27 +493,95 @@ async function handleFile(file) {
 
   await delay(600);
 
-  /* ── Show connector + Stage 2 ── */
+  /* ── Show connector + Type classification step ── */
   showConnector("connector1");
+  await delay(400);
+  showStep("stepType");
+
+  const crops = data.crops || [];
+
+  /* Pre-decode crop images once (they are reused in Stage 2 step). */
+  const cropImgs = [];
+  for (const crop of crops) {
+    const cropImg = new window.Image();
+    cropImg.src = "data:image/jpeg;base64," + crop.crop_image_base64;
+    await cropImg.decode();
+    cropImgs.push(cropImg);
+  }
+
+  const tc = $("#typeContent");
+  tc.innerHTML = "";
+
+  let typesAvailable = 0;
+  for (let i = 0; i < crops.length; i++) {
+    const crop = crops[i];
+    const cropImg = cropImgs[i];
+
+    const wrap = document.createElement("div");
+    wrap.style.marginBottom = "1rem";
+
+    /* Crop canvas with translucent-red padding overlay and no detections. */
+    const typeCanvas = renderCanvasWithBoxes(
+      cropImg, [], "typeCrop" + crop.crop_index, false,
+      { paddingTargetBox: crop.target_box_local_xyxy }
+    );
+    wrap.appendChild(typeCanvas);
+
+    /* Type badge. */
+    const badge = document.createElement("div");
+    badge.className = "type-badge";
+    if (crop.predicted_type != null) {
+      typesAvailable++;
+      const probType2 = crop.prob_type2 != null ? crop.prob_type2 : 0;
+      const conf = crop.predicted_type === 2 ? probType2 : 1 - probType2;
+      badge.innerHTML = `
+        <span class="emoji">🎯</span>
+        <span class="type-value">Type ${crop.predicted_type}</span>
+        <span class="type-prob">confidence ${(conf * 100).toFixed(1)}%</span>`;
+    } else {
+      badge.innerHTML = `
+        <span class="emoji">🎯</span>
+        <span class="type-value" style="color:var(--text-dim)">Type unavailable</span>
+        <span class="type-prob">classifier not loaded</span>`;
+    }
+    wrap.appendChild(badge);
+    tc.appendChild(wrap);
+  }
+
+  if (typesAvailable > 0) {
+    /* Show which types were predicted in the badge text. */
+    const labels = crops
+      .filter(c => c.predicted_type != null)
+      .map(c => "Type " + c.predicted_type);
+    setBadgeDone("badgeType", labels.join(", "));
+  } else {
+    setBadgeDone("badgeType", "skipped");
+  }
+
+  await delay(500);
+
+  /* ── Show connector + Stage 2 ── */
+  showConnector("connectorType");
   await delay(400);
   showStep("stepStage2");
 
-  const crops = data.crops || [];
   const s2c = $("#stage2Content");
   s2c.innerHTML = "";
 
   let totalBullets = 0;
   const classCount = {};
 
-  for (const crop of crops) {
-    const cropImg = new window.Image();
-    cropImg.src = "data:image/jpeg;base64," + crop.crop_image_base64;
-    await cropImg.decode();
+  for (let i = 0; i < crops.length; i++) {
+    const crop = crops[i];
+    const cropImg = cropImgs[i];
 
     const wrap = document.createElement("div");
     wrap.style.marginBottom = "1rem";
 
-    const cropCanvas = renderCanvasWithBoxes(cropImg, crop.detections, "crop" + crop.crop_index, false);
+    const cropCanvas = renderCanvasWithBoxes(
+      cropImg, crop.detections, "crop" + crop.crop_index, false,
+      { paddingTargetBox: crop.target_box_local_xyxy }
+    );
     wrap.appendChild(cropCanvas);
 
     if (crop.detections.length > 0) {
@@ -478,10 +616,24 @@ async function handleFile(file) {
   showStep("stepSummary");
 
   const sc = $("#summaryContent");
-  let statsHtml = '<div class="summary-grid">';
+  let statsHtml = "";
+  if (data.total_score != null) {
+    statsHtml += `
+      <div class="score-card">
+        <div class="score-value">${data.total_score}</div>
+        <div class="score-label">Final score (bullet holes)</div>
+      </div>`;
+  }
+  statsHtml += '<div class="summary-grid">';
   statsHtml += statCard(s1.length, "Targets");
   statsHtml += statCard(totalBullets, "Bullet holes");
   statsHtml += statCard(crops.length, "Crops");
+  const typeLabels = crops
+    .filter(c => c.predicted_type != null)
+    .map(c => "Type " + c.predicted_type);
+  if (typeLabels.length > 0) {
+    statsHtml += statCard(typeLabels.join(", "), "Target type");
+  }
   statsHtml += "</div>";
 
   if (Object.keys(classCount).length > 0) {
@@ -501,7 +653,7 @@ async function handleFile(file) {
 }
 
 /* ── Helpers ── */
-function renderCanvasWithBoxes(img, dets, id, isFullImage) {
+function renderCanvasWithBoxes(img, dets, id, isFullImage, opts) {
   const maxW = 880;
   const scale = img.naturalWidth > maxW ? maxW / img.naturalWidth : 1;
   const w = Math.round(img.naturalWidth * scale);
@@ -517,6 +669,32 @@ function renderCanvasWithBoxes(img, dets, id, isFullImage) {
 
   const ctx = canvas.getContext("2d");
   ctx.drawImage(img, 0, 0, w, h);
+
+  /* Optional red-translucent padding overlay.
+     `paddingTargetBox` is the Stage-1 target box in *crop-native* pixels; any
+     crop area outside this box is padding and is filled with translucent red. */
+  const paddingTargetBox = opts && opts.paddingTargetBox;
+  if (paddingTargetBox && paddingTargetBox.length === 4) {
+    let [tx1, ty1, tx2, ty2] = paddingTargetBox.map(v => v * scale);
+    tx1 = Math.max(0, Math.min(w, tx1));
+    ty1 = Math.max(0, Math.min(h, ty1));
+    tx2 = Math.max(0, Math.min(w, tx2));
+    ty2 = Math.max(0, Math.min(h, ty2));
+    ctx.fillStyle = "rgba(239, 68, 68, 0.35)";
+    /* top band */
+    if (ty1 > 0) ctx.fillRect(0, 0, w, ty1);
+    /* bottom band */
+    if (ty2 < h) ctx.fillRect(0, ty2, w, h - ty2);
+    /* left band (between top & bottom) */
+    if (tx1 > 0) ctx.fillRect(0, ty1, tx1, Math.max(0, ty2 - ty1));
+    /* right band */
+    if (tx2 < w) ctx.fillRect(tx2, ty1, w - tx2, Math.max(0, ty2 - ty1));
+
+    /* Thin solid red outline around the target box so the padded region reads clearly. */
+    ctx.strokeStyle = "rgba(239, 68, 68, 0.9)";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(tx1, ty1, Math.max(0, tx2 - tx1), Math.max(0, ty2 - ty1));
+  }
 
   for (const d of dets) {
     const [x1, y1, x2, y2] = d.box_xyxy.map(v => v * scale);
@@ -584,6 +762,8 @@ function resetUI() {
   $("#badgeGrey").innerHTML = '<span class="spinner" style="width:12px;height:12px;border-width:2px"></span> Running';
   $("#badge1").className = "step-badge badge-running";
   $("#badge1").innerHTML = '<span class="spinner" style="width:12px;height:12px;border-width:2px"></span> Running';
+  $("#badgeType").className = "step-badge badge-running";
+  $("#badgeType").innerHTML = '<span class="spinner" style="width:12px;height:12px;border-width:2px"></span> Running';
   $("#badge2").className = "step-badge badge-running";
   $("#badge2").innerHTML = '<span class="spinner" style="width:12px;height:12px;border-width:2px"></span> Running';
 
@@ -593,6 +773,9 @@ function resetUI() {
   $("#stage1Content").innerHTML = `
     <div class="spinner-wrap"><div class="spinner"></div>
     <span>Running target detection on greyscale image...</span></div>`;
+  $("#typeContent").innerHTML = `
+    <div class="spinner-wrap"><div class="spinner"></div>
+    <span>Classifying target type on cropped region...</span></div>`;
   $("#stage2Content").innerHTML = `
     <div class="spinner-wrap"><div class="spinner"></div>
     <span>Analysing cropped region for bullet holes...</span></div>`;

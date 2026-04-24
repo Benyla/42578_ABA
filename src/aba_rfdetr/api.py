@@ -11,7 +11,8 @@ from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 
 from aba_rfdetr.inference import predict_image_bytes, predict_image_bytes_staged
-from aba_rfdetr.schemas import PredictResponse, StagedPredictResponse
+from aba_rfdetr.schemas import PredictResponse, StagedPredictResponse, TypePredictResponse
+from aba_rfdetr.resnet_type_classifier.predict import predict_type_from_image_bytes
 
 _TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
@@ -71,6 +72,35 @@ async def predict_staged(file: UploadFile = File(...)) -> StagedPredictResponse:
             success=False,
             stage1_detections=[],
             crops=[],
+            error=str(exc),
+            detail={"traceback": traceback.format_exc()},
+        )
+
+
+@app.post("/predict/type", response_model=TypePredictResponse)
+async def predict_type(file: UploadFile = File(...)) -> TypePredictResponse:
+    """Classify target type (1 vs 2) using Stage-1 crop + ResNet."""
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Expected an image file (image/*).")
+    try:
+        data = await file.read()
+        if not data:
+            raise HTTPException(status_code=400, detail="Empty file.")
+        pred = predict_type_from_image_bytes(data)
+        return TypePredictResponse(
+            success=True,
+            predicted_type=pred.predicted_type,
+            prob_type2=pred.prob_type2,
+            crop_box_xyxy=pred.crop_box_xyxy,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        return TypePredictResponse(
+            success=False,
+            predicted_type=None,
+            prob_type2=None,
+            crop_box_xyxy=None,
             error=str(exc),
             detail={"traceback": traceback.format_exc()},
         )

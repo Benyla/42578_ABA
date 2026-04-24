@@ -1,0 +1,21 @@
+seed: 42
+
+dataset:
+  labels_csv: data/target_labels.csv
+  coco_json: data/instances.json
+  images_dir: data/images
+  out_dir: data/resnet_type12
+  val_fraction: 0.2
+  padding: 0.05
+
+train:
+  out_dir: runs/resnet_type12
+  arch: resnet18
+  image_size: 224
+  epochs: 12
+  batch_size: 32
+  lr: 3.0e-4
+  weight_decay: 1.0e-4
+  freeze_backbone_epochs: 3
+  num_workers: 2
+

@@ -36,6 +36,7 @@ ENV/
 /*.pth
 data/images/
 data/rf_train/
+data/resnet_type12/
 data/rf_train_stage1/
 data/rf_train_stage2/
 data/crops/
@@ -64,3 +65,8 @@ htmlcov/
 # Misc
 .env
 .env.local
+.venv
+.venv-resnet
+
+.torch_cache/
+.mpl_cache/

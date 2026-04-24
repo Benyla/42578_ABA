@@ -51,6 +51,7 @@ def main() -> None:
         (ROOT / "hf_README.md", "README.md"),
         (ROOT / "models" / "stage1_target.pth", "models/stage1_target.pth"),
         (ROOT / "models" / "stage2_bullet.pth", "models/stage2_bullet.pth"),
+        (ROOT / "runs" / "resnet_type12" / "model_best.pt", "runs/resnet_type12/model_best.pt"),
     ]
     files.extend(_collect_dir(ROOT / "src", "src"))
     files.extend(_collect_dir(ROOT / "configs", "configs"))

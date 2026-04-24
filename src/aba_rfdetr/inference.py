@@ -284,6 +284,15 @@ def predict_pil_image_staged(image: Image.Image) -> StagedPredictResponse:
     crop_padding = float(s2_cfg.get("crop_padding", 0.10))
     s2_names = _stage2_class_names()
 
+    # Local import to avoid module-level cycle:
+    # `resnet_type_classifier.predict` imports `aba_rfdetr.inference`.
+    try:
+        from aba_rfdetr.resnet_type_classifier.predict import (
+            predict_type_from_pil_crop,
+        )
+    except Exception:  # noqa: BLE001 — classifier is optional at runtime
+        predict_type_from_pil_crop = None  # type: ignore[assignment]
+
     grey_image = _to_greyscale_rgb(image)
 
     grey_buf = io.BytesIO()
@@ -327,6 +336,7 @@ def predict_pil_image_staged(image: Image.Image) -> StagedPredictResponse:
 
         s2_det = s2_model.predict(crop, threshold=s2_threshold)
         crop_dets: list[DetectionItem] = []
+        crop_score = 0
         if s2_det is not None and len(s2_det) > 0:
             for j in range(len(s2_det)):
                 bx1, by1, bx2, by2 = s2_det.xyxy[j].tolist()
@@ -338,19 +348,50 @@ def predict_pil_image_staged(image: Image.Image) -> StagedPredictResponse:
                     score=float(s2_det.confidence[j]),
                     box_xyxy=[bx1, by1, bx2, by2],
                 ))
+                if label.startswith("Bullet_"):
+                    try:
+                        crop_score += int(label.split("_", 1)[1])
+                    except ValueError:
+                        pass
+
+        target_box_local = [
+            float(x1 - cx1),
+            float(y1 - cy1),
+            float(x2 - cx1),
+            float(y2 - cy1),
+        ]
+
+        predicted_type: int | None = None
+        prob_type2: float | None = None
+        if predict_type_from_pil_crop is not None:
+            try:
+                type_pred = predict_type_from_pil_crop(crop)
+                predicted_type = int(type_pred.predicted_type)
+                prob_type2 = float(type_pred.prob_type2)
+            except Exception:  # noqa: BLE001 — keep staged pipeline working
+                predicted_type = None
+                prob_type2 = None
 
         crops.append(CropResult(
             crop_index=i,
             crop_box_xyxy=[float(cx1), float(cy1), float(cx2), float(cy2)],
             crop_image_base64=crop_b64,
             detections=crop_dets,
+            target_box_local_xyxy=target_box_local,
+            crop_padding=float(crop_padding),
+            predicted_type=predicted_type,
+            prob_type2=prob_type2,
+            crop_score=int(crop_score),
         ))
+
+    total_score = sum(c.crop_score for c in crops)
 
     return StagedPredictResponse(
         success=True,
         stage1_detections=stage1_items,
         crops=crops,
         greyscale_image_base64=greyscale_b64,
+        total_score=int(total_score),
     )
 
 
