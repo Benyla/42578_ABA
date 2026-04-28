@@ -49,6 +49,7 @@ models/*.pt
 models/*.safetensors
 models/*.onnx
 !models/.gitkeep
+bin_str/data
 
 # Logs / runs
 runs/
