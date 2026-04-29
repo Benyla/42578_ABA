@@ -85,18 +85,36 @@ def _build_model(stage_cfg: dict[str, Any]) -> Any:
         kwargs["pretrain_weights"] = ck_resolved
     m = model_cls(**kwargs)
 
-    # Force CPU unless explicitly overridden.
+    # Keep RF-DETR's internal "device" setting consistent with where its
+    # parameters actually live. This avoids CPU/GPU dtype mismatch errors like:
+    #   Input type (torch.FloatTensor) and weight type (torch.cuda.FloatTensor)
     #
-    # rfdetr defaults to "mps" on Apple Silicon when available, but that can
-    # fail depending on the PyTorch build/runtime. CPU is the most portable
-    # option (and matches Hugging Face Spaces' free tier).
-    forced = os.environ.get("ABA_DEVICE", "").strip().lower()
-    if forced == "":
-        forced = "cpu"
+    # We still allow a user override via ABA_DEVICE, but if we override we must
+    # also move the model parameters accordingly.
+    forced = os.environ.get("ABA_DEVICE", "").strip().lower()  # e.g. "cpu", "cuda", "cuda:0"
     try:
+        import torch
+
+        def _normalize_device(raw: str) -> torch.device:
+            if raw in {"", "auto"}:
+                # Prefer CUDA when available; else CPU.
+                return torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+            if raw == "cuda" and torch.cuda.is_available():
+                return torch.device("cuda:0")
+            return torch.device(raw)
+
+        desired = _normalize_device(forced)
+
+        # Move underlying torch module if present.
+        if hasattr(m, "model") and hasattr(m.model, "model"):
+            m.model.model.to(desired)  # type: ignore[attr-defined]
+
+        # Sync the context device (used by rfdetr.predict() for moving inputs).
         if hasattr(m, "model") and hasattr(m.model, "device"):
-            m.model.device = forced  # type: ignore[attr-defined]
+            # rfdetr accepts strings like "cpu" / "cuda"
+            m.model.device = str(desired)  # type: ignore[attr-defined]
     except Exception:
+        # If anything about device placement fails, fall back to whatever rfdetr chose.
         pass
 
     return m
