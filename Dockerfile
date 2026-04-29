@@ -28,6 +28,7 @@ RUN pip install --no-cache-dir -e .
 
 COPY models/stage1_target.pth models/stage1_target.pth
 COPY models/stage2_bullet.pth models/stage2_bullet.pth
+COPY runs/resnet_type12/model_best.pt runs/resnet_type12/model_best.pt
 
 RUN chown -R appuser:appuser /app
 USER appuser
